@@ -2,9 +2,9 @@ import streamlit as st
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta
+import re  # <-- 1. Import 're' for validation
 
 # Import your model classes from models.py
-# Make sure models.py is in the same folder
 try:
     from models import db, user, hotel, room_type, bookings, bookingitem
 except ImportError as e:
@@ -13,19 +13,12 @@ except ImportError as e:
 
 
 # --- Database Connection ---
-
-# @st.cache_resource is the correct way to create a global object
-# that is shared across all user sessions and reruns.
+# Connects to your local MySQL database
 @st.cache_resource
 def get_engine():
-    """Creates a SQLAlchemy engine for the LOCAL database."""
     try:
-        # --- THIS IS THE MODIFIED PART ---
-        # Connect directly to your local MySQL server using its IP address
-        db_url = (
-            f"mysql+pymysql://root:satish@127.0.0.1/hotel_reservation"
-        )
-        # -----------------------------------
+        # Use 127.0.0.1 instead of 'localhost'
+        db_url = "mysql+pymysql://root:satish@127.0.0.1/hotel_reservation"
         return create_engine(db_url)
     except Exception as e:
         st.error(f"Failed to create database engine. Is your local MySQL server running?: {e}")
@@ -34,16 +27,16 @@ def get_engine():
 engine = get_engine()
 SessionLocal = sessionmaker(bind=engine)
 
-# This will create all your tables in your local DB if they don't exist
-try:
-    db.metadata.create_all(bind=engine)
-except Exception as e:
-    st.warning(f"Could not create tables (this is fine if they exist): {e}")
-
-
 def get_session():
     """Creates a new SQLAlchemy session."""
     return SessionLocal()
+
+# This is a safe way to create tables if they don't exist
+try:
+    with engine.begin() as conn:
+        db.metadata.create_all(conn)
+except Exception as e:
+    st.warning(f"Could not create tables (this is fine if they exist): {e}")
 
 
 # --- Page: View Hotels ---
@@ -53,7 +46,7 @@ def page_view_hotels():
     try:
         all_hotels = session.query(hotel).all()
         if not all_hotels:
-            st.warning("No hotels found. Try running the seed.py script to add some.")
+            st.warning("No hotels found in the database.")
         else:
             hotel_data = [
                 {
@@ -71,10 +64,11 @@ def page_view_hotels():
         session.close()
 
 
-# --- Page: Create User ---
+# --- Page: Create User (NOW WITH VALIDATION) ---
 def page_create_user():
     st.header("🧑 Create a New User")
-    with st.form("user_form", clear_on_submit=True):
+    
+    with st.form("user_form"):
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
         full_name = st.text_input("Full Name")
@@ -82,12 +76,42 @@ def page_create_user():
         submitted = st.form_submit_button("Create User")
         
         if submitted:
-            if not email or not password or not full_name:
-                st.error("Please fill out all fields.")
-            else:
+            # --- Start Validation ---
+            is_valid = True
+            
+            # 1. Email Validation
+            if not email.strip().endswith("@gmail.com"):
+                st.error("Invalid email. Please enter a '@gmail.com' address.")
+                is_valid = False
+
+            # 2. Password Validation
+            if len(password) < 8:
+                st.error("Password must be at least 8 characters long.")
+                is_valid = False
+            elif not re.search(r'[a-z]', password):
+                st.error("Password must contain at least one lowercase letter.")
+                is_valid = False
+            elif not re.search(r'[A-Z]', password):
+                st.error("Password must contain at least one uppercase letter.")
+                is_valid = False
+            elif not re.search(r'\d', password):
+                st.error("Password must contain at least one number.")
+                is_valid = False
+            elif not re.search(r'[^a-zA-Z0-9]', password):
+                st.error("Password must contain at least one special character.")
+                is_valid = False
+            
+            # 3. Full Name Validation
+            if not full_name:
+                st.error("Please enter your full name.")
+                is_valid = False
+            
+            # --- End Validation ---
+
+            # 4. If all checks pass, try to create the user
+            if is_valid:
                 session = get_session()
                 try:
-                    # In a real app, you MUST hash the password
                     new_user = user(
                         email=email,
                         password_hash=password, # WARNING: Storing plain text password
@@ -116,7 +140,6 @@ def page_book_room():
         all_hotels = session.query(hotel).all()
         if not all_hotels:
             st.warning("No hotels loaded. Please add hotels to the database.")
-            session.close() # Close session before stopping
             st.stop()
         
         hotel_names = {h.name: h.id for h in all_hotels}
@@ -205,13 +228,7 @@ def page_view_bookings():
             session.close()
 
 # --- Main App Navigation ---
-
 st.title("🏨 Hotel Reservation System")
-
-# We must initialize the db object for models.py to work
-# but we don't want it to *do* anything, so we pass no app
-# --- THIS LINE WAS REMOVED AS IT WAS CAUSING A CRASH ---
-# db.init_app() 
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
@@ -228,3 +245,4 @@ elif page == "View Bookings":
     page_view_bookings()
 elif page == "Create User":
     page_create_user()
+
