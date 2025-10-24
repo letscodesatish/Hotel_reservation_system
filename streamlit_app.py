@@ -11,7 +11,6 @@ except ImportError as e:
     st.stop()
 
 
-
 @st.cache_resource
 def get_engine():
     """Creates a SQLAlchemy engine from Streamlit secrets."""
@@ -31,7 +30,6 @@ SessionLocal = sessionmaker(bind=engine)
 def get_session():
     """Creates a new SQLAlchemy session."""
     return SessionLocal()
-
 
 
 def page_view_hotels():
@@ -56,6 +54,7 @@ def page_view_hotels():
         st.error(f"An error occurred: {e}")
     finally:
         session.close()
+
 
 
 def page_create_user():
@@ -89,6 +88,7 @@ def page_create_user():
                 finally:
                     session.close()
 
+
 def page_book_room():
     st.header("📝 Book a Room")
     session = get_session()
@@ -107,7 +107,7 @@ def page_book_room():
         selected_hotel_name = st.selectbox("Select Hotel", hotel_names.keys())
         hotel_id = hotel_names[selected_hotel_name]
         
-      
+        
         rooms = session.query(room_type).filter(room_type.hotel_id == hotel_id).all()
         if not rooms:
             st.warning("This hotel has no rooms available.")
@@ -142,7 +142,6 @@ def page_book_room():
                         )
                         session.add(new_booking)
                         session.commit() 
-                        
                       
                         new_item = bookingitem(
                             booking_id=new_booking.id,
@@ -158,6 +157,7 @@ def page_book_room():
                         session.rollback()
                         st.error(f"Error: {e} (Please ensure User ID is correct)")
     session.close()
+
 
 def page_view_bookings():
     st.header("🧾 View Your Bookings")
@@ -188,10 +188,8 @@ def page_view_bookings():
             session.close()
 
 
+
 st.title("🏨 Hotel Reservation System")
-
-
-db.init_app() 
 
 
 st.sidebar.title("Navigation")
@@ -208,3 +206,4 @@ elif page == "View Bookings":
     page_view_bookings()
 elif page == "Create User":
     page_create_user()
+
