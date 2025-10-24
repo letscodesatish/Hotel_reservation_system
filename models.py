@@ -18,15 +18,12 @@ class hotel(db.Model):
     location = db.Column(db.String(255))
     rating = db.Column(db.Float, default=0.0)
 
-# --- THIS IS THE CORRECTED ROOM_TYPE CLASS ---
 class room_type(db.Model):
     __tablename__="room_types"
     id=db.Column(db.Integer,primary_key=True)
     
-    # A room type must belong to a hotel
     hotel_id = db.Column(db.Integer, db.ForeignKey('hotels.id'), nullable=False)
     
-    # Properties of the room type itself
     name = db.Column(db.String(100), nullable=False)
     base_price = db.Column(db.Numeric(10, 2), nullable=False)
     capacity = db.Column(db.Integer, nullable=False)
@@ -48,7 +45,6 @@ class bookings(db.Model):
     status=db.Column(db.Enum("pending","confirmed","cancelled","checked_in","checked_out"),default="pending")
     total_price=db.Column(db.Numeric(10,2),nullable=False)
     
-    # --- FIXED TYPO: checkin_date ---
     checkin_date = db.Column(db.Date,nullable=False)
     checkout_date=db.Column(db.Date,nullable=False)
 

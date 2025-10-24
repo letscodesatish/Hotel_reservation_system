@@ -4,23 +4,18 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from decimal import Decimal
 
-# Import your model classes from models.py
 from models import db, user, hotel, room_type, bookings, bookingitem
 
-# --- DATABASE CONNECTION ---
 DATABASE_URL = "mysql+pymysql://root:satish@localhost/hotel_reservation"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# --- HELPER FUNCTIONS ---
 
 def as_dict(obj):
-    # Helper function to convert database objects to dictionaries
     return {c.name: str(getattr(obj, c.name)) for c in obj.__table__.columns}
 
 def _save_bookings_to_json(session):
-    # This is the new automatic save function
     print("...saving bookings to JSON...")
     
     all_bookings = session.query(bookings).all()
@@ -34,7 +29,6 @@ def _save_bookings_to_json(session):
     except Exception as e:
         print(f"❌ ERROR: Could not save JSON file: {e}")
 
-# --- 1. FUNCTION TO VIEW HOTELS ---
 def view_hotels(session):
     print("\n--- 🏨 All Hotels ---")
     all_hotels = session.query(hotel).all()
@@ -47,7 +41,6 @@ def view_hotels(session):
         print(f"  ID: {h.id} | Name: {h.name} | Location: {h.location} | Rating: {h.rating}")
     print("------------------------\n")
 
-# --- 2. FUNCTION TO BOOK A ROOM (MODIFIED) ---
 def book_room(session):
     print("\n--- 📝 Create a New Booking ---")
     
@@ -69,7 +62,6 @@ def book_room(session):
         checkin_date = input("Enter check-in date (YYYY-MM-DD): ")
         checkout_date = input("Enter check-out date (YYYY-MM-DD): ")
 
-        # Use the new session.get() method
         room = session.get(room_type, room_type_id)
         if not room:
             print("Invalid Room Type ID.")
@@ -101,10 +93,7 @@ def book_room(session):
         print("\n✅ SUCCESS! Booking created.")
         print(f"  Booking ID: {new_booking.id}, Total Price: ${total_price}")
         
-        # --- THIS IS THE NEW PART ---
-        # Automatically save all bookings to JSON after creating a new one
         _save_bookings_to_json(session)
-        # --------------------------
         
     except ValueError:
         print("\n❌ ERROR: Invalid input. Please enter numbers for IDs.")
@@ -113,7 +102,6 @@ def book_room(session):
         print(f"\n❌ ERROR: An error occurred: {e}")
         session.rollback()
 
-# --- 3. FUNCTION TO VIEW ALL BOOKINGS ---
 def view_bookings(session):
     print("\n--- 🧾 All Bookings ---")
     
@@ -127,7 +115,6 @@ def view_bookings(session):
         print(f"  ID: {b.id} | Hotel ID: {b.hotel_id} | User ID: {b.user_id} | Status: {b.status} | Total: ${b.total_price}")
     print("-----------------------\n")
 
-# --- 4. FUNCTION TO CREATE A USER ---
 def create_user(session):
     print("\n--- 🧑 Create New User ---")
     try:
@@ -137,7 +124,7 @@ def create_user(session):
         
         new_user = user(
             email=email,
-            password_hash=password, # In a real app, use: bcrypt.hash(password)
+            password_hash=password, 
             full_name=full_name,
             role='customer'
         )
@@ -150,7 +137,6 @@ def create_user(session):
         print(f"\n❌ ERROR: {e}")
         session.rollback()
 
-# --- MAIN PROGRAM LOOP (MODIFIED) ---
 def main():
     db.metadata.create_all(bind=engine)
     session = SessionLocal()
@@ -162,8 +148,8 @@ def main():
         print("1. View all hotels")
         print("2. Book a room")
         print("3. View all bookings")
-        print("4. Create a new user") # <-- Renumbered
-        print("5. Exit") # <-- Renumbered
+        print("4. Create a new user") 
+        print("5. Exit") 
         
         choice = input("Please enter your choice (1-5): ")
         
@@ -174,9 +160,9 @@ def main():
         elif choice == '3':
             view_bookings(session)
         elif choice == '4':
-            create_user(session) # <-- Renumbered
+            create_user(session) 
         elif choice == '5':
-            print("Goodbye!") # <-- Renumbered
+            print("Goodbye!") 
             break
         else:
             print("Invalid choice. Please try again.")
