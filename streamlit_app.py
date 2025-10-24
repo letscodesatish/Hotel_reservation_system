@@ -21,9 +21,9 @@ def get_engine():
     """Creates a SQLAlchemy engine for the LOCAL database."""
     try:
         # --- THIS IS THE MODIFIED PART ---
-        # Connect directly to your local MySQL server
+        # Connect directly to your local MySQL server using its IP address
         db_url = (
-            f"mysql+pymysql://root:satish@localhost/hotel_reservation"
+            f"mysql+pymysql://root:satish@127.0.0.1/hotel_reservation"
         )
         # -----------------------------------
         return create_engine(db_url)
