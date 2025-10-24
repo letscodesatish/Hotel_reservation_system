@@ -3,7 +3,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta
 
-
+# Import your model classes from models.py
+# Make sure models.py is in the same folder
 try:
     from models import db, user, hotel, room_type, bookings, bookingitem
 except ImportError as e:
@@ -11,34 +12,48 @@ except ImportError as e:
     st.stop()
 
 
+# --- Database Connection ---
+
+# @st.cache_resource is the correct way to create a global object
+# that is shared across all user sessions and reruns.
 @st.cache_resource
 def get_engine():
-    """Creates a SQLAlchemy engine from Streamlit secrets."""
+    """Creates a SQLAlchemy engine for the LOCAL database."""
     try:
+        # --- THIS IS THE MODIFIED PART ---
+        # Connect directly to your local MySQL server
         db_url = (
-            f"mysql+pymysql://{st.secrets['db_username']}:{st.secrets['db_password']}"
-            f"@{st.secrets['db_host']}/{st.secrets['db_name']}"
+            f"mysql+pymysql://root:satish@localhost/hotel_reservation"
         )
+        # -----------------------------------
         return create_engine(db_url)
     except Exception as e:
-        st.error(f"Failed to create database engine. Check your secrets.toml: {e}")
+        st.error(f"Failed to create database engine. Is your local MySQL server running?: {e}")
         st.stop()
 
 engine = get_engine()
 SessionLocal = sessionmaker(bind=engine)
+
+# This will create all your tables in your local DB if they don't exist
+try:
+    db.metadata.create_all(bind=engine)
+except Exception as e:
+    st.warning(f"Could not create tables (this is fine if they exist): {e}")
+
 
 def get_session():
     """Creates a new SQLAlchemy session."""
     return SessionLocal()
 
 
+# --- Page: View Hotels ---
 def page_view_hotels():
     st.header("🏨 All Available Hotels")
     session = get_session()
     try:
         all_hotels = session.query(hotel).all()
         if not all_hotels:
-            st.warning("No hotels found in the database.")
+            st.warning("No hotels found. Try running the seed.py script to add some.")
         else:
             hotel_data = [
                 {
@@ -56,7 +71,7 @@ def page_view_hotels():
         session.close()
 
 
-
+# --- Page: Create User ---
 def page_create_user():
     st.header("🧑 Create a New User")
     with st.form("user_form", clear_on_submit=True):
@@ -72,10 +87,10 @@ def page_create_user():
             else:
                 session = get_session()
                 try:
-                    
+                    # In a real app, you MUST hash the password
                     new_user = user(
                         email=email,
-                        password_hash=password, 
+                        password_hash=password, # WARNING: Storing plain text password
                         full_name=full_name,
                         role='customer'
                     )
@@ -88,26 +103,27 @@ def page_create_user():
                 finally:
                     session.close()
 
-
+# --- Page: Book a Room ---
 def page_book_room():
     st.header("📝 Book a Room")
     session = get_session()
     
     with st.form("booking_form"):
-        
+        # Get User ID
         user_id = st.number_input("Your User ID", min_value=1, step=1)
         
-        
+        # Select Hotel
         all_hotels = session.query(hotel).all()
         if not all_hotels:
             st.warning("No hotels loaded. Please add hotels to the database.")
+            session.close() # Close session before stopping
             st.stop()
         
         hotel_names = {h.name: h.id for h in all_hotels}
         selected_hotel_name = st.selectbox("Select Hotel", hotel_names.keys())
         hotel_id = hotel_names[selected_hotel_name]
         
-        
+        # Select Room Type (based on hotel)
         rooms = session.query(room_type).filter(room_type.hotel_id == hotel_id).all()
         if not rooms:
             st.warning("This hotel has no rooms available.")
@@ -127,11 +143,11 @@ def page_book_room():
                     st.error("Check-out date must be after check-in date.")
                 else:
                     try:
-                        
+                        # Get room price
                         room = session.get(room_type, room_type_id)
                         total_price = room.base_price * quantity
                         
-                        
+                        # Create booking
                         new_booking = bookings(
                             user_id=user_id,
                             hotel_id=hotel_id,
@@ -141,8 +157,9 @@ def page_book_room():
                             checkout_date=checkout_date
                         )
                         session.add(new_booking)
-                        session.commit() 
-                      
+                        session.commit() # Commit to get new_booking.id
+                        
+                        # Create booking item
                         new_item = bookingitem(
                             booking_id=new_booking.id,
                             room_type_id=room_type_id,
@@ -158,7 +175,7 @@ def page_book_room():
                         st.error(f"Error: {e} (Please ensure User ID is correct)")
     session.close()
 
-
+# --- Page: View Bookings ---
 def page_view_bookings():
     st.header("🧾 View Your Bookings")
     user_id_filter = st.number_input("Enter your User ID to find bookings", min_value=1, step=1)
@@ -187,11 +204,15 @@ def page_view_bookings():
         finally:
             session.close()
 
-
+# --- Main App Navigation ---
 
 st.title("🏨 Hotel Reservation System")
 
+# We must initialize the db object for models.py to work
+# but we don't want it to *do* anything, so we pass no app
+db.init_app() 
 
+# Sidebar navigation
 st.sidebar.title("Navigation")
 page = st.sidebar.radio(
     "Go to", 
