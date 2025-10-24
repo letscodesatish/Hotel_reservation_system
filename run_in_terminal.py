@@ -3,19 +3,28 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from decimal import Decimal
+import re  # Import the regular expression module
 
+# Import your model classes from models.py
+# (Make sure this matches your file and class names)
 from models import db, user, hotel, room_type, bookings, bookingitem
 
+# --- DATABASE CONNECTION ---
+# This connects to your local MySQL database
 DATABASE_URL = "mysql+pymysql://root:satish@localhost/hotel_reservation"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+# --- HELPER FUNCTIONS ---
+
 def as_dict(obj):
+    """Helper function to convert database objects to dictionaries"""
     return {c.name: str(getattr(obj, c.name)) for c in obj.__table__.columns}
 
 def _save_bookings_to_json(session):
+    """This is the automatic save function"""
     print("...saving bookings to JSON...")
     
     all_bookings = session.query(bookings).all()
@@ -29,18 +38,24 @@ def _save_bookings_to_json(session):
     except Exception as e:
         print(f"❌ ERROR: Could not save JSON file: {e}")
 
+# --- 1. FUNCTION TO VIEW HOTELS ---
 def view_hotels(session):
     print("\n--- 🏨 All Hotels ---")
+    
+    # Query the database
     all_hotels = session.query(hotel).all()
     
     if not all_hotels:
         print("No hotels found in the database.")
         return
 
+    # Print a clean list
     for h in all_hotels:
         print(f"  ID: {h.id} | Name: {h.name} | Location: {h.location} | Rating: {h.rating}")
     print("------------------------\n")
 
+
+# --- 2. FUNCTION TO BOOK A ROOM ---
 def book_room(session):
     print("\n--- 📝 Create a New Booking ---")
     
@@ -48,6 +63,7 @@ def book_room(session):
         user_id = int(input("Enter your User ID: "))
         hotel_id = int(input("Enter the Hotel ID you want to book: "))
         
+        # Show available room types for that hotel
         rooms = session.query(room_type).filter(room_type.hotel_id == hotel_id).all()
         if not rooms:
             print("Sorry, that hotel has no room types defined.")
@@ -62,6 +78,7 @@ def book_room(session):
         checkin_date = input("Enter check-in date (YYYY-MM-DD): ")
         checkout_date = input("Enter check-out date (YYYY-MM-DD): ")
 
+        # Use the new session.get() method (fixes legacy warning)
         room = session.get(room_type, room_type_id)
         if not room:
             print("Invalid Room Type ID.")
@@ -69,6 +86,7 @@ def book_room(session):
             
         total_price = room.base_price * quantity
         
+        # Create the new booking object
         new_booking = bookings(
             user_id=user_id,
             hotel_id=hotel_id,
@@ -78,11 +96,13 @@ def book_room(session):
             checkout_date=datetime.strptime(checkout_date, '%Y-%m-%d').date()
         )
         
+        # Add to session and commit to database
         session.add(new_booking)
         session.commit()
         
+        # We also need to add the booking_item
         new_item = bookingitem(
-            booking_id=new_booking.id,
+            booking_id=new_booking.id, # Get the ID from the object we just saved
             room_type_id=room_type_id,
             quantity=quantity,
             price_per_room=room.base_price
@@ -93,6 +113,7 @@ def book_room(session):
         print("\n✅ SUCCESS! Booking created.")
         print(f"  Booking ID: {new_booking.id}, Total Price: ${total_price}")
         
+        # Automatically save all bookings to JSON
         _save_bookings_to_json(session)
         
     except ValueError:
@@ -102,6 +123,8 @@ def book_room(session):
         print(f"\n❌ ERROR: An error occurred: {e}")
         session.rollback()
 
+
+# --- 3. FUNCTION TO VIEW ALL BOOKINGS ---
 def view_bookings(session):
     print("\n--- 🧾 All Bookings ---")
     
@@ -115,16 +138,51 @@ def view_bookings(session):
         print(f"  ID: {b.id} | Hotel ID: {b.hotel_id} | User ID: {b.user_id} | Status: {b.status} | Total: ${b.total_price}")
     print("-----------------------\n")
 
+
+# --- 4. FUNCTION TO CREATE A USER (WITH VALIDATION) ---
 def create_user(session):
     print("\n--- 🧑 Create New User ---")
-    try:
-        email = input("Enter email: ")
+
+    # --- Email Validation Loop ---
+    while True:
+        email = input("Enter email (must be a @gmail.com address): ")
+        if not email.strip().endswith("@gmail.com"):
+            print("❌ ERROR: Invalid email. Please enter a '@gmail.com' address.")
+        else:
+            break  # Email is valid
+
+    # --- Password Validation Loop ---
+    print("\nPassword must be at least 8 characters long and contain:")
+    print("  - At least one lowercase letter [a-z]")
+    print("  - At least one uppercase letter [A-Z]")
+    print("  - At least one number [0-9]")
+    print("  - At least one special character [!, @, #, $...]")
+    
+    while True:
         password = input("Enter password: ")
-        full_name = input("Enter full name: ")
         
+        if len(password) < 8:
+            print("❌ ERROR: Password must be at least 8 characters long.")
+        elif not re.search(r'[a-z]', password):
+            print("❌ ERROR: Password must contain at least one lowercase letter.")
+        elif not re.search(r'[A-Z]', password):
+            print("❌ ERROR: Password must contain at least one uppercase letter.")
+        elif not re.search(r'\d', password):
+            print("❌ ERROR: Password must contain at least one number.")
+        elif not re.search(r'[^a-zA-Z0-9]', password):
+            # This checks for any character that is not a letter or number
+            print("❌ ERROR: Password must contain at least one special character.")
+        else:
+            print("✅ Password is strong.")
+            break  # Password is valid
+
+    full_name = input("Enter full name: ")
+    
+    # --- Database logic in its own try/except ---
+    try:
         new_user = user(
             email=email,
-            password_hash=password, 
+            password_hash=password,  # WARNING: You should hash this!
             full_name=full_name,
             role='customer'
         )
@@ -134,11 +192,16 @@ def create_user(session):
         print(f"\n✅ SUCCESS! Created user '{full_name}' with ID: {new_user.id}")
         
     except Exception as e:
-        print(f"\n❌ ERROR: {e}")
+        print(f"\n❌ DATABASE ERROR: {e}") # This will catch "email already taken"
         session.rollback()
 
+
+# --- MAIN PROGRAM LOOP ---
 def main():
+    # This creates all your tables if they don't exist
     db.metadata.create_all(bind=engine)
+    
+    # Create a session to talk to the database
     session = SessionLocal()
     
     print("Welcome to the Hotel Reservation Terminal!")
@@ -167,7 +230,9 @@ def main():
         else:
             print("Invalid choice. Please try again.")
             
+    # Close the session when done
     session.close()
 
 if __name__ == "__main__":
     main()
+
