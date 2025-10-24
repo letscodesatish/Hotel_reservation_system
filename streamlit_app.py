@@ -210,7 +210,8 @@ st.title("🏨 Hotel Reservation System")
 
 # We must initialize the db object for models.py to work
 # but we don't want it to *do* anything, so we pass no app
-db.init_app() 
+# --- THIS LINE WAS REMOVED AS IT WAS CAUSING A CRASH ---
+# db.init_app() 
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
